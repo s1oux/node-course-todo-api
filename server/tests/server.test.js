@@ -4,27 +4,15 @@ const {ObjectID} = require('mongodb');
 
 const {app} = require('./../server');
 const {Todo} = require('./../models/todo');
+const {User} = require('./../models/user');
+const {todos, users, populateTodos, populateUsers} = require('./seed/seed');
 
-const todos = [{
-  _id: new ObjectID(),
-  text: 'first'
-}, {
-  _id: new ObjectID(),
-  text: 'second',
-  completed: true,
-  completedAt: 666
-}, {
-  _id: new ObjectID(),
-  text: 'third'
-}];
+beforeEach(populateUsers);
+beforeEach(populateTodos);
 
-beforeEach((done) => {
-  Todo.remove({}).then(() => {
-    return Todo.insertMany(todos);
-  }).then(() => done());
-});
+describe('POST /todos', function() {
+  // commented because of too long timeout which throws error
 
-describe('POST /todos', () => {
   it('should create new todo', (done) => {
     var text = 'note test text';
 
@@ -48,7 +36,7 @@ describe('POST /todos', () => {
                 });
   });
 
-  it('should not create todo with invalid data', (done) => {
+  it('should not create todo with invalid data', function(done) {
     request(app)
                 .post('/todos')
                 .send({})
@@ -66,8 +54,8 @@ describe('POST /todos', () => {
   });
 });
 
-describe('GET /todos', () => {
-  it('should get all todos', (done) => {
+describe('GET /todos', function() {
+  it('should get all todos', function(done) {
     request(app)
                 .get('/todos')
                 .expect(200)
@@ -78,8 +66,8 @@ describe('GET /todos', () => {
   });
 });
 
-describe('GET /todos/:id', () => {
-  it('should return todo doc', (done) => {
+describe('GET /todos/:id', function() {
+  it('should return todo doc', function(done) {
     request(app)
                 .get(`/todos/${todos[0]._id.toHexString()}`)
                 .expect(200)
@@ -90,7 +78,7 @@ describe('GET /todos/:id', () => {
 
   });
 
-  it('should return 404 if todo not found', (done) => {
+  it('should return 404 if todo not found', function(done) {
     var hexId = new ObjectID().toHexString();
     request(app)
                 .get(`/todos/${hexId}`)
@@ -98,7 +86,7 @@ describe('GET /todos/:id', () => {
                 .end(done);
   });
 
-  it('should return 404 for non-object id', (done) => {
+  it('should return 404 for non-object id', function(done) {
     request(app)
                 .get('/todos/1488')
                 .expect(404)
@@ -106,8 +94,8 @@ describe('GET /todos/:id', () => {
   });
 });
 
-describe('DELETE /todos/:id', () => {
-  it('should remove a todo', (done) => {
+describe('DELETE /todos/:id', function() {
+  it('should remove a todo', function(done) {
     var hexId = todos[1]._id.toHexString();
 
     request(app)
@@ -128,7 +116,7 @@ describe('DELETE /todos/:id', () => {
                 });
   });
 
-  it('should return 404 if todo not found', (done) => {
+  it('should return 404 if todo not found', function(done) {
     var hexId = new ObjectID().toHexString();
     request(app)
                 .delete(`/todos/${hexId}`)
@@ -136,7 +124,7 @@ describe('DELETE /todos/:id', () => {
                 .end(done);
   });
 
-  it('should return 404 if object id is invalid', (done) => {
+  it('should return 404 if object id is invalid', function(done) {
     request(app)
                 .delete('/todos/1488')
                 .expect(404)
@@ -144,8 +132,8 @@ describe('DELETE /todos/:id', () => {
   });
 });
 
-describe('PATCH /todos/:id', () => {
-  it('should update the todo', (done) => {
+describe('PATCH /todos/:id', function() {
+  it('should update the todo', function(done) {
     var hexId = todos[0]._id.toHexString();
     var text = 'updated text';
 
@@ -164,7 +152,7 @@ describe('PATCH /todos/:id', () => {
                 .end(done);
   });
 
-  it('should clear completedAt when todo is not completed', (done) => {
+  it('should clear completedAt when todo is not completed', function(done) {
     var hexId = todos[1]._id.toHexString();
     var text = 'updated second text'
 
@@ -180,6 +168,70 @@ describe('PATCH /todos/:id', () => {
                   expect(res.body.todo.completed).toBe(false);
                   expect(res.body.todo.completedAt).toBeFalsy();
                 })
+                .end(done);
+  });
+});
+
+describe('GET /users/me', () => {
+  it('should return user if authenticated', (done) => {
+    request(app)
+                .get('/users/me')
+                .set('x-auth', users[0].tokens[0].token)
+                .expect(200)
+                .expect((res) => {
+                  expect(res.body._id).toBe(users[0]._id.toHexString());
+                  expect(res.body.email).toBe(users[0].email);
+                })
+                .end(done);
+  });
+
+  it('should return 401 if not authenticated', (done) => {
+    request(app)
+                .get('/users/me')
+                .expect(401)
+                .expect((res) => {
+                  expect(res.body).toEqual({});
+                })
+                .end(done);
+  });
+});
+
+describe('POST /users', () => {
+  it('should create a user', (done) => {
+    var email = 'andrewdrew@example.com';
+    var password = 'password';
+
+    request(app)
+                .post('/users')
+                .send({email, password})
+                .expect(200)
+                .expect((res) => {
+                  expect(res.headers['x-auth']).toBeTruthy();
+                  expect(res.body._id).toBeTruthy();
+                  expect(res.body.email).toBe(email);
+                })
+                .end(done);
+  });
+
+  it('should return validation erro if request invalid', (done) => {
+    var email = 'notvalid';
+    var password = 'p';
+
+    request(app)
+                .post('/users')
+                .send({email, password})
+                .expect(400)
+                .end(done);
+  });
+
+  it('should not create a user if email is in use', (done) => {
+    var email = users[0].email;
+    var password = 'validpassword';
+
+    request(app)
+                .post('/users')
+                .send({email, password})
+                .expect(400)
                 .end(done);
   });
 });
